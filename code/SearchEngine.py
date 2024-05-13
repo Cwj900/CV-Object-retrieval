@@ -87,15 +87,37 @@ class BoVW:
 
 
 class serach_engine:
-    def __init__(self,BoVW_model,input_image,vocabulary):
+    def __init__(self,BoVW_model,input_image,vocabulary,k):
         self.BoVW_model=BoVW_model
         self.input_image=input_image
-        self.vocabulary=self.vocabulary
+        self.vocabulary=vocabulary  
+        self.k=k
+
+        self.IVF=[]      
+
+    #构建倒排索引
+    def build_inverted_index(self,images_representation):
+        '''
+        输入：
+            images_representation：采用td-idf权重更新后的所有图片的向量
+        输出：
+            indexes：反向索引列表
+        '''
+        for i,image in enumerate(images_representation):
+            #对每张图片
+            for j,word in enumerate(image):
+                if word!=0:
+                    self.IVF[j]+=[i]
+        return self.IVF
 
     #计算输入图像的BoVW特征向量
     def co_sift(self,image):
         pass
     def co_input_BoVW(self):
+        '''
+        输入：输入图片的地址
+        输出：输入图片的BoVW特征向量
+        '''
         #提取sift特征向量
         sifts=self.co_sift(self.input_image)
         #获得所有vocabulary中所有word的出现频率
@@ -103,27 +125,24 @@ class serach_engine:
         #计算td-idf权重更新后的所有图片的向量
         image_BoVW=[tf[i]*self.BoVW_model.idf[i] for i in range(len(self.vocabulary))]
         return image_BoVW
-        
-
-#构建倒排索引
-def build_inverted_index(images_representation,dataset):
-    '''
-    输入：
-        images_representation：采用td-idf权重更新后的所有图片的向量
-        dataset：所有图片的地址的列表
-    输出：
-        indexes：反向索引列表
-    '''
-    indexes=[]
-    for i,image in enumerate(images_representation):
-        #对每张图片
-        for j,word in enumerate(image):
+    
+    #查找倒排索引
+    def co_image_index(self,input_image_BoVW):
+        relevant_image_indexes=[]
+        for i,word in enumerate(input_image_BoVW):
             if word!=0:
-                indexes[j]+=[dataset[i]]
-    return indexes
+                relevant_image_indexes+=self.IVF[i]
+        return relevant_image_indexes
 
-
-
-#计算相似度
-def co_similarity(vector_1,vector_2):
-    pass
+    #找出最接近的k个图像
+    def search(self,relevant_image_indexes,images_representation,input_image_BoVW):
+        search_image={}
+        for image in relevant_image_indexes:
+            #image的向量
+            image_BoVW=images_representation[image]
+            distance=np.linalg.norm(image_BoVW-input_image_BoVW)
+            search_image[image]=distance
+        #对结果进行排序
+        search_image=sorted(search_image.items(),key=lambda x:x[1])
+        similar_image=[key for key,value in search_image[:self.k]]
+        return similar_image
