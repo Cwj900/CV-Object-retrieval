@@ -1,6 +1,7 @@
 import numpy as np
 import math
-
+import cv2
+sift = cv2.SIFT_create()
 class BoVW:
     def __init__(self,vocabulary,dataset,sifts_features_path):
         self.vocabulary=vocabulary
@@ -112,7 +113,14 @@ class serach_engine:
 
     #计算输入图像的BoVW特征向量
     def co_sift(self,image):
-        pass
+       image = cv2.imread(image)
+       gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+       keypoints, descriptors = sift.detectAndCompute(gray_image, None)
+       if descriptors is not None:
+          return descriptors
+       return None
+
+
     def co_input_BoVW(self):
         '''
         输入：输入图片的地址
