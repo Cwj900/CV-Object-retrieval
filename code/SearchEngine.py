@@ -1,14 +1,26 @@
 import numpy as np
 import math
+import pandas as pd
+import pickle
+from tqdm import tqdm
 import cv2
-sift = cv2.SIFT_create()
-class BoVW:
-    def __init__(self,vocabulary,dataset,sifts_features_path):
-        self.vocabulary=vocabulary
-        self.num_vocabulary=len(vocabulary)
-        self.N=len(dataset)
-        self.sifts_features=np.load(sifts_features_path,'r')
 
+class BoVW:
+    def __init__(self,vocabulary_path,dataset_path,sifts_features_path):
+        self.vocabulary=np.load(vocabulary_path,'r')
+        self.num_vocabulary=len(self.vocabulary)
+
+        dataset=[]
+        data=pd.read_csv(dataset_path)
+        list=data.values.tolist()
+        for i in range(len(list)):
+            dataset.append(list[i][0])
+
+        self.N=len(dataset)
+        with open(sifts_features_path, 'rb') as file:
+            self.sifts_features = pickle.load(file)
+
+        self.idf=[]
 
     #找到sift最近的vocabulary的idx
     def fine_nearest_word(self,sift):
@@ -33,7 +45,7 @@ class BoVW:
             sifts：一个图像的所有sift特征
             vocabulary：聚类后的视觉单词
         输出：
-            ft:一个图像的各个vocabulary出现频率统计[len(vocabulary),]
+            tf:一个图像的各个vocabulary出现频率统计[len(vocabulary),]
         '''
         image_vocabulary_fre=np.zeros(self.num_vocabulary)
         for sift in sifts:
@@ -42,8 +54,8 @@ class BoVW:
             #计算频数
             image_vocabulary_fre[nearest_word]+=1
         n=np.sum(image_vocabulary_fre)
-        ft=[word/n for word in image_vocabulary_fre]
-        return ft
+        tf=[word/n for word in image_vocabulary_fre]
+        return tf
 
     #使用TF-IDF权重
     def build_image_representation(self):
@@ -64,63 +76,73 @@ class BoVW:
         images_representation=[]
 
         #计算tf
+        print('计算所有图像的各个视觉词汇的出现频率...')
         images_tf=[]
-        for sifts in self.sifts_features:
+        for sifts in tqdm(self.sifts_features):
             tf=self.build_vocabulary_fre(sifts) #tf:len(vocabulary)
             images_tf.append(tf)#[num_image,len(vocabulary)]
         
         #计算idf
         df_word=np.zeros(self.num_vocabulary)
         #对每个图象的tf
+        print('计算所有idf...')
         for tf in images_tf:
             for i,word in enumerate(tf):
                 if word!=0:
                     df_word[i]+=1
-        self.idf=[math.log(self.N/(word+1)) for word in df_word]   #+1为了防止分母为0
+        self.idf=[math.log(self.N/(word+1)) for word in df_word]#+1为了防止分母为0
 
         #计算所有图片的表示向量
         for tf in images_tf:
             image_representation=[tf[i]*self.idf[i] for i in range(self.num_vocabulary)]
             images_representation.append(image_representation)
-
+        np.save('dataset/images_representation.npy',images_representation)
         return images_representation
 
 
 
 class serach_engine:
-    def __init__(self,BoVW_model,input_image,vocabulary,k):
+    def __init__(self,BoVW_model,input_image,vocabulary_path,images_representation_path,dataset_path,k):
         self.BoVW_model=BoVW_model
         self.input_image=input_image
-        self.vocabulary=vocabulary  
+        self.vocabulary=np.load(vocabulary_path,'r')
+        self.images_representation=np.load(images_representation_path,'r')
+        print(f'images_representation{self.images_representation.shape}')
         self.k=k
 
-        self.IVF=[]      
+        self.IVF=[[]]*len(self.vocabulary)     
+        self.dataset=[]
+        data=pd.read_csv(dataset_path)
+        list=data.values.tolist()
+        for i in range(len(list)):
+            self.dataset.append(list[i][0]) 
 
     #构建倒排索引
-    def build_inverted_index(self,images_representation):
+    def build_inverted_index(self):
         '''
         输入：
             images_representation：采用td-idf权重更新后的所有图片的向量
         输出：
             indexes：反向索引列表
         '''
-        for i,image in enumerate(images_representation):
+        print('计算反向索引...')
+        for i,image in enumerate(self.images_representation):
             #对每张图片
             for j,word in enumerate(image):
                 if word!=0:
-                    self.IVF[j]+=[i]
+                    self.IVF[j]=self.IVF[j]+[i]
         return self.IVF
 
     #计算输入图像的BoVW特征向量
     def co_sift(self,image):
-       image = cv2.imread(image)
-       gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-       keypoints, descriptors = sift.detectAndCompute(gray_image, None)
-       if descriptors is not None:
+        image = cv2.imread(image)
+        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        sift = cv2.SIFT_create()
+        keypoints, descriptors = sift.detectAndCompute(gray_image, None)
+        if descriptors is not None:
           return descriptors
-       return None
-
-
+        return None
+    
     def co_input_BoVW(self):
         '''
         输入：输入图片的地址
@@ -140,17 +162,38 @@ class serach_engine:
         for i,word in enumerate(input_image_BoVW):
             if word!=0:
                 relevant_image_indexes+=self.IVF[i]
+        relevant_image_indexes=list(set(relevant_image_indexes))
         return relevant_image_indexes
 
     #找出最接近的k个图像
-    def search(self,relevant_image_indexes,images_representation,input_image_BoVW):
+    def search(self,relevant_image_indexes,input_image_BoVW):
         search_image={}
         for image in relevant_image_indexes:
             #image的向量
-            image_BoVW=images_representation[image]
+            image_BoVW=self.images_representation[image]
             distance=np.linalg.norm(image_BoVW-input_image_BoVW)
             search_image[image]=distance
         #对结果进行排序
         search_image=sorted(search_image.items(),key=lambda x:x[1])
         similar_image=[key for key,value in search_image[:self.k]]
-        return similar_image
+        similar_image_path=[self.dataset[index] for index in similar_image]
+        return similar_image_path
+
+
+dataset_path='dataset/image_paths.csv'
+vocaluraly_path='dataset/visual_words.npy'
+sifts_features_path='dataset/image_features_list.pkl'
+input_image='dataset/1.jpg'
+images_representation_path='dataset/images_representation.npy'
+
+
+
+
+bovw=BoVW(vocaluraly_path,dataset_path,sifts_features_path)
+BoVW_model=bovw.build_image_representation()
+serach_eng=serach_engine(bovw,input_image,vocaluraly_path,images_representation_path,dataset_path,20)
+serach_eng.build_inverted_index()
+input_image_BoVW=serach_eng.co_input_BoVW()
+relevant_image_indexes=serach_eng.co_image_index(input_image_BoVW)
+lists=serach_eng.search(relevant_image_indexes,input_image_BoVW)
+print(lists)
