@@ -96,8 +96,8 @@ class BoVW:
         for tf in images_tf:
             image_representation=[tf[i]*self.idf[i] for i in range(self.num_vocabulary)]
             images_representation.append(image_representation)
-        np.save('dataset/images_representation.npy',images_representation)
-        np.save('dataset/idf.npy',self.idf)
+        np.save('images_representation.npy',images_representation)
+        np.save('idf.npy',self.idf)
         return images_representation
 
 
@@ -185,7 +185,7 @@ class serach_engine:
         similar_image_path=[self.dataset[index] for index in similar_image]
         return similar_image_path
 
-
+'''
 dataset_path='dataset/image_paths.csv'
 vocaluraly_path='dataset/visual_words.npy'
 sifts_features_path='dataset/image_features_list.pkl'
@@ -202,3 +202,4 @@ input_image_BoVW=serach_eng.co_input_BoVW()
 relevant_image_indexes=serach_eng.co_image_index(input_image_BoVW)
 lists=serach_eng.search(relevant_image_indexes,input_image_BoVW)
 print(lists)
+'''
