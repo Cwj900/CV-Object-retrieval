@@ -97,17 +97,18 @@ class BoVW:
             image_representation=[tf[i]*self.idf[i] for i in range(self.num_vocabulary)]
             images_representation.append(image_representation)
         np.save('dataset/images_representation.npy',images_representation)
+        np.save('dataset/idf.npy',self.idf)
         return images_representation
 
 
 
 class serach_engine:
-    def __init__(self,BoVW_model,input_image,vocabulary_path,images_representation_path,dataset_path,k):
+    def __init__(self,BoVW_model,input_image,vocabulary_path,images_representation_path,dataset_path,idf_path,k):
         self.BoVW_model=BoVW_model
         self.input_image=input_image
         self.vocabulary=np.load(vocabulary_path,'r')
         self.images_representation=np.load(images_representation_path,'r')
-        print(f'images_representation{self.images_representation.shape}')
+        self.idf=np.load(idf_path,'r')
         self.k=k
 
         self.IVF=[[]]*len(self.vocabulary)     
@@ -131,6 +132,9 @@ class serach_engine:
             for j,word in enumerate(image):
                 if word!=0:
                     self.IVF[j]=self.IVF[j]+[i]
+        #储存倒排索引
+        with open('IVF.pkl', 'wb') as file:
+            pickle.dump(self.IVF, file)
         return self.IVF
 
     #计算输入图像的BoVW特征向量
@@ -153,11 +157,13 @@ class serach_engine:
         #获得所有vocabulary中所有word的出现频率
         tf=self.BoVW_model.build_vocabulary_fre(sifts)
         #计算td-idf权重更新后的所有图片的向量
-        image_BoVW=[tf[i]*self.BoVW_model.idf[i] for i in range(len(self.vocabulary))]
+        image_BoVW=[tf[i]*self.idf[i] for i in range(len(self.vocabulary))]
         return image_BoVW
     
     #查找倒排索引
     def co_image_index(self,input_image_BoVW):
+        with open('IVF.pkl', 'rb') as file:
+            self.IVF = pickle.load(file)
         relevant_image_indexes=[]
         for i,word in enumerate(input_image_BoVW):
             if word!=0:
@@ -183,16 +189,15 @@ class serach_engine:
 dataset_path='dataset/image_paths.csv'
 vocaluraly_path='dataset/visual_words.npy'
 sifts_features_path='dataset/image_features_list.pkl'
-input_image='dataset/1.jpg'
+idf_path='dataset/idf.npy'
 images_representation_path='dataset/images_representation.npy'
-
-
+input_image='dataset/1.jpg'
 
 
 bovw=BoVW(vocaluraly_path,dataset_path,sifts_features_path)
 BoVW_model=bovw.build_image_representation()
-serach_eng=serach_engine(bovw,input_image,vocaluraly_path,images_representation_path,dataset_path,20)
-serach_eng.build_inverted_index()
+serach_eng=serach_engine(bovw,input_image,vocaluraly_path,images_representation_path,dataset_path,idf_path,20)
+serach_eng.build_inverted_index() 
 input_image_BoVW=serach_eng.co_input_BoVW()
 relevant_image_indexes=serach_eng.co_image_index(input_image_BoVW)
 lists=serach_eng.search(relevant_image_indexes,input_image_BoVW)
