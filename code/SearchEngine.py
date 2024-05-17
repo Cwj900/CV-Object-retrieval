@@ -4,6 +4,7 @@ import pandas as pd
 import pickle
 from tqdm import tqdm
 import cv2
+from numpy.linalg import norm
 
 class BoVW:
     def __init__(self,vocabulary_path,dataset_path,sifts_features_path):
@@ -96,8 +97,8 @@ class BoVW:
         for tf in images_tf:
             image_representation=[tf[i]*self.idf[i] for i in range(self.num_vocabulary)]
             images_representation.append(image_representation)
-        np.save('images_representation.npy',images_representation)
-        np.save('idf.npy',self.idf)
+        np.save('dataset/images_representation.npy',images_representation)
+        np.save('dataset/idf.npy',self.idf)
         return images_representation
 
 
@@ -164,6 +165,7 @@ class serach_engine:
     def co_image_index(self,input_image_BoVW):
         with open('IVF.pkl', 'rb') as file:
             self.IVF = pickle.load(file)
+        #初始化具有相同特征的图像索引列表
         relevant_image_indexes=[]
         for i,word in enumerate(input_image_BoVW):
             if word!=0:
@@ -172,34 +174,41 @@ class serach_engine:
         return relevant_image_indexes
 
     #找出最接近的k个图像
+    def cosine_similarity(self,vector1, vector2):
+        dot_product = np.dot(vector1, vector2)
+        norm_vector1 = norm(vector1)
+        norm_vector2 = norm(vector2)
+        similarity = dot_product / (norm_vector1 * norm_vector2)
+        return similarity
     def search(self,relevant_image_indexes,input_image_BoVW):
         search_image={}
         for image in relevant_image_indexes:
             #image的向量
             image_BoVW=self.images_representation[image]
-            distance=np.linalg.norm(image_BoVW-input_image_BoVW)
-            search_image[image]=distance
+            similarity=self.cosine_similarity(image_BoVW,input_image_BoVW)
+            # distance=np.linalg.norm(image_BoVW-input_image_BoVW)
+            search_image[image]=similarity
         #对结果进行排序
-        search_image=sorted(search_image.items(),key=lambda x:x[1])
-        similar_image=[key for key,value in search_image[:self.k]]
+        # search_image=sorted(search_image.items(),key=lambda x:x[1])
+        similar_image=sorted(search_image,key=search_image.get,reverse=True)
+        similar_image=similar_image[1:self.k+1]#排除输入图片本身
         similar_image_path=[self.dataset[index] for index in similar_image]
         return similar_image_path
 
-'''
+
 dataset_path='dataset/image_paths.csv'
 vocaluraly_path='dataset/visual_words.npy'
 sifts_features_path='dataset/image_features_list.pkl'
 idf_path='dataset/idf.npy'
 images_representation_path='dataset/images_representation.npy'
-input_image='dataset/1.jpg'
+input_image='dataset\christ_church_001044.jpg'
 
 
 bovw=BoVW(vocaluraly_path,dataset_path,sifts_features_path)
-BoVW_model=bovw.build_image_representation()
+# BoVW_model=bovw.build_image_representation()
 serach_eng=serach_engine(bovw,input_image,vocaluraly_path,images_representation_path,dataset_path,idf_path,20)
-serach_eng.build_inverted_index() 
+# serach_eng.build_inverted_index() 
 input_image_BoVW=serach_eng.co_input_BoVW()
 relevant_image_indexes=serach_eng.co_image_index(input_image_BoVW)
 lists=serach_eng.search(relevant_image_indexes,input_image_BoVW)
 print(lists)
-'''
