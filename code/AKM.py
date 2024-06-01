@@ -1,64 +1,41 @@
-import cv2
 import numpy as np
-from sklearn.cluster import KMeans, MiniBatchKMeans
-from sklearn.neighbors import NearestNeighbors
-import random
+import pyflann as pf
 
-# 构建随机化的k-d树
-def build_kd_trees(features, num_trees):
-    kd_trees = []
-    num_dimensions = features.shape[1]
+# 加载之前保存的SIFT特征
+features = np.load('image_features_list.npy')
 
-    for _ in range(num_trees):
-        random_dimensions = random.sample(range(num_dimensions), random.randint(5, 15))
-        kd_tree = NearestNeighbors(n_neighbors=1, algorithm='kd_tree')
-        kd_tree.fit(features[:, random_dimensions])
-        kd_trees.append((kd_tree, random_dimensions))
+# 初始化聚类中心，随机选择features中的行作为初始中心
+num_clusters = 500
+random_indices = np.random.choice(len(features), size=num_clusters, replace=False)
+visual_words = features[random_indices]
 
-    return kd_trees
+# 初始化FLANN对象
+flann = pf.FLANN()
 
-# AKM聚类特征
-def approximate_kmeans(features, num_clusters, num_trees=8):
-    features = np.array(features)
-    kd_trees = build_kd_trees(features, num_trees)
+for _ in range(10):  # 迭代10次
+    # 在每次迭代开始时，使用FLANN库构建一组随机化的k-d树
+    params = flann.build_index(visual_words, algorithm='kdtree', trees=8, checks=16)
 
-    kmeans = MiniBatchKMeans(n_clusters=num_clusters, random_state=0, batch_size=10000, max_iter=10,metric='manhattan')
-    kmeans.cluster_centers_ = np.random.permutation(features)[:num_clusters]
+    # 找到每个点的最近的聚类中心
+    nearest_indices, _ = flann.nn_index(features, num_neighbors=1, checks=params['checks'])
 
-    for _ in range(10):  # 假设迭代10次
-        closest_centers = [[] for _ in range(num_clusters)]
+    # 更新聚类中心
+    new_centers = []
+    for i in range(num_clusters):
+        cluster_points = features[nearest_indices.ravel() == i]
+        cluster_center = cluster_points.mean(axis=0)
+        new_centers.append(cluster_center)
+    new_centers = np.array(new_centers)
+    
+    # 检查中心是否有变化，如果没有则停止迭代
+    if np.allclose(visual_words, new_centers, atol=1e-5):
+        break
 
-        for idx, feature in enumerate(features):
-            closest_center = None
-            min_distance = float('inf')
-
-            for tree, dimensions in kd_trees:
-                _, indices = tree.kneighbors(feature[dimensions].reshape(1, -1))
-
-                for index in indices[0]:
-                    distance = np.linalg.norm(feature - kmeans.cluster_centers_[index])
-
-                    if distance < min_distance:
-                        closest_center = index
-                        min_distance = distance
-
-            closest_centers[closest_center].append(idx)
-
-        for j in range(num_clusters):
-            if closest_centers[j]:
-                kmeans.cluster_centers_[j] = np.mean(features[closest_centers[j]], axis=0)
-
-    return kmeans.cluster_centers_
-
-# 加载特征
-features = np.load('code\image_features_list.npy').astype('float32')
-
-# 假设我们想要的视觉词汇大小为 5000
-num_visual_words = 50000
-
-# 聚类特征以创建视觉词汇
-visual_words = approximate_kmeans(features, num_visual_words)
+    visual_words = new_centers
 
 print("视觉词汇构建完成，词汇大小为:", len(visual_words))
-# 保存每张图片的SIFT特征和视觉词汇
-np.save('visual_words_AKM.npy', visual_words)
+# 保存视觉词汇
+np.save('visual_vocabulary_akm.npy', visual_words)
+
+
+
