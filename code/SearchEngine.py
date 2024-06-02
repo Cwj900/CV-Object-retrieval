@@ -18,8 +18,10 @@ class BoVW:
             dataset.append(list[i][0])
 
         self.N=len(dataset)
+
         with open(sifts_features_path, 'rb') as file:
-            self.sifts_features = pickle.load(file)
+            data = pickle.load(file)
+        self.sifts_features=data['features']
 
         self.idf=[]
 
@@ -138,15 +140,16 @@ class serach_engine:
             pickle.dump(self.IVF, file)
         return self.IVF
 
-    #计算输入图像的BoVW特征向量
-    def co_sift(self,image):
-        image = cv2.imread(image)
-        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        sift = cv2.SIFT_create()
+    #计算输入图像的BoVW特征向量  
+    def co_sift(self, image):
+        image=cv2.imread(image)
+        gray_image=cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        sift=cv2.SIFT_create()
         keypoints, descriptors = sift.detectAndCompute(gray_image, None)
         if descriptors is not None:
-          return descriptors
-        return None
+            keypoints_locations = [kp.pt for kp in keypoints] # 提取关键点的位置
+            return descriptors, keypoints_locations
+        return None,None
     
     def co_input_BoVW(self):
         '''
@@ -154,12 +157,12 @@ class serach_engine:
         输出：输入图片的BoVW特征向量
         '''
         #提取sift特征向量
-        sifts=self.co_sift(self.input_image)
+        sifts,keypoints_locations=self.co_sift(self.input_image)
         #获得所有vocabulary中所有word的出现频率
         tf=self.BoVW_model.build_vocabulary_fre(sifts)
         #计算td-idf权重更新后的所有图片的向量
         image_BoVW=[tf[i]*self.idf[i] for i in range(len(self.vocabulary))]
-        return image_BoVW
+        return image_BoVW,sifts,keypoints_locations
     
     #查找倒排索引
     def co_image_index(self,input_image_BoVW):
@@ -186,29 +189,35 @@ class serach_engine:
             #image的向量
             image_BoVW=self.images_representation[image]
             similarity=self.cosine_similarity(image_BoVW,input_image_BoVW)
-            # distance=np.linalg.norm(image_BoVW-input_image_BoVW)
             search_image[image]=similarity
         #对结果进行排序
-        # search_image=sorted(search_image.items(),key=lambda x:x[1])
         similar_image=sorted(search_image,key=search_image.get,reverse=True)
-        similar_image=similar_image[1:self.k+1]#排除输入图片本身
         similar_image_path=[self.dataset[index] for index in similar_image]
-        return similar_image_path
+        return similar_image_path,similar_image
 
 
 dataset_path='dataset/image_paths.csv'
 vocaluraly_path='dataset/visual_words.npy'
-sifts_features_path='dataset/image_features_list.pkl'
+sifts_features_path='dataset/features_and_keylocation.pkl'
 idf_path='dataset/idf.npy'
 images_representation_path='dataset/images_representation.npy'
-input_image='dataset\christ_church_001044.jpg'
+input_image='dataset/all_souls_000000.jpg'
 
 
 bovw=BoVW(vocaluraly_path,dataset_path,sifts_features_path)
 # BoVW_model=bovw.build_image_representation()
 serach_eng=serach_engine(bovw,input_image,vocaluraly_path,images_representation_path,dataset_path,idf_path,20)
 # serach_eng.build_inverted_index() 
-input_image_BoVW=serach_eng.co_input_BoVW()
+input_image_BoVW,input_sifts,input_keypoints_locations=serach_eng.co_input_BoVW()
 relevant_image_indexes=serach_eng.co_image_index(input_image_BoVW)
-lists=serach_eng.search(relevant_image_indexes,input_image_BoVW)
-print(lists)
+lists,idx_list=serach_eng.search(relevant_image_indexes,input_image_BoVW)
+print(lists,idx_list)
+
+
+
+
+
+
+
+
+
