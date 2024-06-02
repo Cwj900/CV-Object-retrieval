@@ -198,10 +198,10 @@ class serach_engine:
 
 dataset_path='dataset/image_paths.csv'
 vocaluraly_path='dataset/visual_words.npy'
-sifts_features_path='dataset/features_and_keylocation.pkl'
+sifts_features_path='dataset/features_and_keypoints.pkl'
 idf_path='dataset/idf.npy'
 images_representation_path='dataset/images_representation.npy'
-input_image='dataset/all_souls_000000.jpg'
+input_image='dataset/all_souls_000051.jpg'
 
 
 bovw=BoVW(vocaluraly_path,dataset_path,sifts_features_path)
