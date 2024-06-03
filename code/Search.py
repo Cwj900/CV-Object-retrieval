@@ -106,13 +106,13 @@ class BoVW:
 
 
 class serach_engine:
-    def __init__(self,BoVW_model,input_image,vocabulary_path,images_representation_path,dataset_path,idf_path,k):
+    def __init__(self,BoVW_model,input_image,vocabulary_path,images_representation_path,dataset_path,idf_path,test_area=None):
         self.BoVW_model=BoVW_model
         self.input_image=input_image
         self.vocabulary=np.load(vocabulary_path,'r')
         self.images_representation=np.load(images_representation_path,'r')
         self.idf=np.load(idf_path,'r')
-        self.k=k
+        self.test_area=test_area
 
         self.IVF=[[]]*len(self.vocabulary)     
         self.dataset=[]
@@ -144,12 +144,19 @@ class serach_engine:
     def co_sift(self, image):
         image=cv2.imread(image)
         gray_image=cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        sift=cv2.SIFT_create()
-        keypoints, descriptors = sift.detectAndCompute(gray_image, None)
+        sift = cv2.SIFT_create()
+        if self.test_area != None:
+            # 提取区域内的特征
+            x1, y1, x2, y2 = self.test_area
+            roi = gray_image[int(y1):int(y2), int(x1):int(x2)]
+            keypoints, descriptors = sift.detectAndCompute(roi, None)
+        else:
+            keypoints, descriptors = sift.detectAndCompute(gray_image, None)
         if descriptors is not None:
             keypoints_locations = [kp.pt for kp in keypoints] # 提取关键点的位置
             return descriptors, keypoints_locations
         return None,None
+
     
     def co_input_BoVW(self):
         '''
@@ -176,7 +183,7 @@ class serach_engine:
         relevant_image_indexes=list(set(relevant_image_indexes))
         return relevant_image_indexes
 
-    #找出最接近的k个图像
+    #找出最接近的图像
     def cosine_similarity(self,vector1, vector2):
         dot_product = np.dot(vector1, vector2)
         norm_vector1 = norm(vector1)
@@ -195,12 +202,12 @@ class serach_engine:
         similar_image_path=[self.dataset[index] for index in similar_image]
         return similar_image_path,similar_image
 
-
-dataset_path='dataset/image_paths.csv'
-vocaluraly_path='dataset/visual_words.npy'
+'''
+dataset_path='image_paths.csv'
+vocaluraly_path='10000\10000.npy'
 sifts_features_path='dataset/features_and_keypoints.pkl'
 idf_path='dataset/idf.npy'
-images_representation_path='dataset/images_representation.npy'
+images_representation_path='10000\idf.npy'
 input_image='dataset/all_souls_000051.jpg'
 
 
@@ -211,9 +218,9 @@ serach_eng=serach_engine(bovw,input_image,vocaluraly_path,images_representation_
 input_image_BoVW,input_sifts,input_keypoints_locations=serach_eng.co_input_BoVW()
 relevant_image_indexes=serach_eng.co_image_index(input_image_BoVW)
 lists,idx_list=serach_eng.search(relevant_image_indexes,input_image_BoVW)
-print(lists,idx_list)
+print(lists)
 
-
+'''
 
 
 

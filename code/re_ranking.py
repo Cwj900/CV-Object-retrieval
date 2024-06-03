@@ -1,4 +1,3 @@
-from SearchEngine import lists,input_sifts,input_keypoints_locations,idx_list
 import cv2
 import numpy as np
 from tqdm import tqdm
@@ -122,9 +121,9 @@ class ReRanking:
 
         return max_num_inliers
 
-
+'''
 keypoints_descriptor_path='dataset/features_and_keypoints.pkl'
 re_ranking=ReRanking(input_keypoint=input_keypoints_locations,input_des=input_sifts,retrieval_results=lists,idx_list=idx_list,keypoints_des_path=keypoints_descriptor_path)
 ranked_results=re_ranking.spatial_verification()
 print(ranked_results)
-
+'''

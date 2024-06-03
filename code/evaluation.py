@@ -1,6 +1,7 @@
 import os
 import numpy as np
-from SearchEngine import BoVW, serach_engine
+from tqdm import tqdm
+from Search import BoVW, serach_engine
 
 class Evaluation:
     def __init__(self, data_dir="gt_files_170407"):
@@ -50,73 +51,73 @@ class Evaluation:
                     self.test_image_paths.append(image_path)
                     self.test_areas.append(area)
 
-    def get_result_images(self, input_image_name, k):
+    def get_result_images(self, input_image_name, k,test_area):
         dataset_path = 'image_paths.csv'
-        vocaluraly_path = r'10\10.npy'
-        sifts_features_path = 'image_features_list.pkl'
-        images_representation_path = r'10\images_representation.npy'
-        idf_path = r'10\idf.npy'
+        vocaluraly_path = r'10000\10000.npy'
+        sifts_features_path = 'features_and_keypoints.pkl'
+        images_representation_path = r'10000\images_representation.npy'
+        idf_path = r'10000\idf.npy'
 
         bovw = BoVW(vocaluraly_path, dataset_path, sifts_features_path)
-        serach_eng = serach_engine(bovw, input_image_name, vocaluraly_path, images_representation_path, dataset_path, idf_path, k)
+        #BoVW_model=bovw.build_image_representation()
+        serach_eng = serach_engine(bovw, input_image_name, vocaluraly_path, images_representation_path, dataset_path, idf_path,test_area)
         serach_eng.build_inverted_index()
-        input_image_BoVW = serach_eng.co_input_BoVW()
+        input_image_BoVW,input_sifts,input_keypoints_locations=serach_eng.co_input_BoVW()
         relevant_image_indexes = serach_eng.co_image_index(input_image_BoVW)
-        lists = serach_eng.search(relevant_image_indexes, input_image_BoVW)
+        lists,idx_list = serach_eng.search(relevant_image_indexes, input_image_BoVW)
 
-        return lists
+        return lists[0:k]
 
-    def compute_precision_recall(self,retrieved_results,good_paths,ok_paths,junk_paths):
-        positive = 0
-        blank = 0
-        negative = 0
+    def compute_average_precision(self, l, results):
+        pos=self.test_good_paths[l]+self.test_ok_paths[l]
+        amb=self.test_junk_paths[l]
 
-        for image in retrieved_results:
-            if image in good_paths or image in ok_paths:
-                positive += 1
-            elif image in junk_paths:
-                blank += 1
-            else:
-                negative += 1
+        old_recall = 0.0
+        old_precision = 1.0
+        ap = 0.0
 
-        precision = positive / len(retrieved_results)
-        recall = positive / (len(good_paths) + len(ok_paths))
+        intersect_size = 0
+        m = 0
+        n = 0
+        while m < len(results):
+            if results[m] in amb:
+                m += 1
+                continue
+            if results[m] in pos:
+                intersect_size += 1
+        
+            recall = intersect_size / len(pos)
+            precision = intersect_size / (n + 1)
 
-        return precision, recall
+            ap += (recall - old_recall) * ((old_precision + precision) / 2)
 
-    def compute_average_precision(self,precisions, recalls):
-        precisions = np.concatenate(([0.], precisions, [0.]))
-        recalls = np.concatenate(([0.], recalls, [1.]))
+            old_recall = recall
+            old_precision = precision
+            m += 1
+            n += 1
 
-        for i in range(len(precisions) - 2, -1, -1):
-            precisions[i] = max(precisions[i], precisions[i + 1])
-
-        change_indices = np.where(recalls[1:] != recalls[:-1])[0]
-        average_precision = np.sum((recalls[change_indices + 1] - recalls[change_indices]) * precisions[change_indices + 1])
-
-        return average_precision
+        return ap
+ 
 
     def evaluate(self):
         APs = []
+        aps=[]
         mAPs = []
-        for i in range(55):
-            k_data=[10,20,30,40,50]
-            precisions=[]
-            recalls=[]
-            for k in k_data:
-                retrieved_results=self.get_result_images(self.test_image_paths[i],k)
-                precision, recall=self.compute_precision_recall(retrieved_results, self.test_good_paths[i],self.test_ok_paths[i],self.test_junk_paths[i])
-                precisions.append(precision)
-                recalls.append(recall)
-            AP=self.compute_average_precision(precisions, recalls)
-            print('precisions:',precisions)
-            print(' recalls:',recalls)
-            print("AP:",AP)
+        for i in tqdm(range(55)):
+            if len(self.test_good_paths[i])+len(self.test_ok_paths[i])>50:
+                k=len(self.test_good_paths[i])+len(self.test_ok_paths[i])
+            else:
+                k=50
+
+            retrieved_results=self.get_result_images(self.test_image_paths[i],k,self.test_areas[i])
+
+            AP=self.compute_average_precision(i,retrieved_results)
             APs.append(AP)
             if i%5==4:
                 mAPs.append(sum(APs) / len(APs))
+                aps=aps+APs
                 APs=[]
-        
+        print(aps)
         return sum(mAPs) / len(mAPs)
 
 if __name__ == "__main__":
