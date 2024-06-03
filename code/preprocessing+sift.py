@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 import pickle
-import pickle
+
 data_path=r"oxbuild_images"
 def get_image_paths(data_dir):
     image_paths=[] #图片地址
@@ -22,6 +22,7 @@ sift = cv2.SIFT_create()
 # 提取图像特征
 def extract_sift_features(image_paths):
     features = []
+    keypoints_locations = []  # 新增，用于存储关键点位置信息
     failed_images = []  # 存储提取失败的图像路径
     for path in image_paths:
         image = cv2.imread(path)
@@ -29,26 +30,32 @@ def extract_sift_features(image_paths):
         keypoints, descriptors = sift.detectAndCompute(gray_image, None)
         if descriptors is not None:
             features.append(descriptors)
+            keypoints_locations.append([kp.pt for kp in keypoints])  
         else:
             failed_images.append(path)  # 将提取失败的图像路径添加到列表中
-    return features, failed_images
+    return features,keypoints_locations, failed_images
 
 # 提取图像特征和确认提取失败的图像
-features, failed_images = extract_sift_features(image_paths)
+features,keypoints_locations, failed_images = extract_sift_features(image_paths)
 
-# 存储数据
-with open('image_features_list.pkl', 'wb') as f:
-    pickle.dump(features, f)
-# 打印提取失败的图像路径
-print("Failed images:")
-for path in failed_images:
-    print(path)
-# 读取存储的数据
-with open('image_features_list.pkl', 'rb') as f:
-    loaded_features = pickle.load(f)
-# 打印每个元素的大小
-for i, feature in enumerate(loaded_features):
-    print(f"Loaded feature {i+1} shape: {feature.shape}")
+def save_features_and_positions(features,  keypoints_locations, file_name):
+    data = {
+        'features': features,
+        'keypoints_locations': keypoints_locations
+    }
+    with open(file_name, 'wb') as file:
+        pickle.dump(data, file)
+
+def load_features_and_keypoints(file_name):
+    with open(file_name, 'rb') as file:
+        data = pickle.load(file)
+    return data['features'],data['keypoints_locations']
+
+# 保存特征和关键点的位置信息
+save_features_and_positions(features,keypoints_locations, 'features_and_keypoints.pkl')
+
+# 在以后的运行中加载特征和关键点的位置信息
+features,keypoints_locations = load_features_and_keypoints('features_and_keypoints.pkl')
 
 # 提取图像特征(展开)
 def extract_sift_features_flatten(image_paths):
